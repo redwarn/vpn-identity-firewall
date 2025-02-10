@@ -122,12 +122,15 @@ func (p *Packet) Serialize() ([]byte, error) {
 	// 找到外部的 IPv4 和 UDP 层
 	var outerIPv4 *layers.IPv4
 	var outerUDP *layers.UDP
+	var geneve *layers.Geneve
 	for _, layer := range outerLayers {
 		switch l := layer.(type) {
 		case *layers.IPv4:
 			outerIPv4 = l
 		case *layers.UDP:
 			outerUDP = l
+		case *layers.Geneve:
+			geneve = l
 		}
 	}
 
@@ -136,28 +139,18 @@ func (p *Packet) Serialize() ([]byte, error) {
 		outerUDP.SetNetworkLayerForChecksum(outerIPv4)
 	}
 
-	// 序列化外部包（从后向前）
-	for i := len(outerLayers) - 1; i >= 0; i-- {
+	// 更新 Geneve 的 Payload
+	if geneve != nil {
+		geneve.Contents = innerBuf.Bytes()
+	}
+
+	// 序列化外部包（从前向后）
+	for i := 0; i < len(outerLayers); i++ {
 		if layer, ok := outerLayers[i].(gopacket.SerializableLayer); ok {
 			err := layer.SerializeTo(outerBuf, opts)
 			if err != nil {
 				return nil, fmt.Errorf("failed to serialize outer layer: %w", err)
 			}
-		} else if layer, ok := outerLayers[i].(*layers.Geneve); ok {
-			// 处理 Geneve 层
-			bytes, err := outerBuf.PrependBytes(len(layer.Contents))
-			if err != nil {
-				return nil, fmt.Errorf("failed to prepend geneve bytes: %v", err)
-			}
-			copy(bytes, layer.Contents)
-
-			// 添加内部包的内容
-			innerBytes := innerBuf.Bytes()
-			payload, err := outerBuf.PrependBytes(len(innerBytes))
-			if err != nil {
-				return nil, fmt.Errorf("failed to prepend inner packet: %v", err)
-			}
-			copy(payload, innerBytes)
 		}
 	}
 
