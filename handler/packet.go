@@ -37,10 +37,22 @@ func NewPacket(packet gopacket.Packet) (*Packet, error) {
 }
 
 func (p *Packet) SwapSrcDstIPv4() {
-	ip := p.packetLayers[0].(*layers.IPv4)
+	ipLayer := p.packet.Layer(layers.LayerTypeIPv4)
+	if ipLayer == nil {
+		log.Printf("No IPv4 layer found in packet")
+		return
+	}
+
+	ip, ok := ipLayer.(*layers.IPv4)
+	if !ok {
+		log.Printf("Failed to convert layer to IPv4")
+		return
+	}
+
 	dst := ip.DstIP
 	ip.DstIP = ip.SrcIP
 	ip.SrcIP = dst
+	p.modified = true
 }
 
 func (p *Packet) Serialize() ([]byte, error) {
