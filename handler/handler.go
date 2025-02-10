@@ -68,8 +68,9 @@ func run(ctx context.Context, handle *pcap.Handle, packetSource *gopacket.Packet
 				log.Printf("Failed to create a packet: %s", err)
 				continue
 			}
+			fmt.Println(p.String())
 			p.SwapSrcDstIPv4()
-
+			fmt.Println(p.String())
 			response, err := p.Serialize()
 			if err != nil {
 				log.Printf("failed to serialize packet: %s", err)

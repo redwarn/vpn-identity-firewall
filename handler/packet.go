@@ -30,29 +30,29 @@ func NewPacket(packet gopacket.Packet) (*Packet, error) {
 		return nil, errors.New("packet has too few layers")
 	}
 
+	if packetLayers[0].LayerType() != layers.LayerTypeIPv4 || packetLayers[1].LayerType() != layers.LayerTypeUDP || packetLayers[2].LayerType() != layers.LayerTypeGeneve {
+		return nil, errors.New("unexpected layers")
+	}
+
+	udp := packetLayers[1].(*layers.UDP)
+	if udp.DstPort != genevePort {
+		return nil, errors.New("not Geneve packet")
+	}
 	return &Packet{
 		packet:       packet,
 		packetLayers: packetLayers,
 	}, nil
 }
 
+func (p Packet) String() string {
+	return p.packet.String()
+}
+
 func (p *Packet) SwapSrcDstIPv4() {
-	ipLayer := p.packet.Layer(layers.LayerTypeIPv4)
-	if ipLayer == nil {
-		log.Printf("No IPv4 layer found in packet")
-		return
-	}
-
-	ip, ok := ipLayer.(*layers.IPv4)
-	if !ok {
-		log.Printf("Failed to convert layer to IPv4")
-		return
-	}
-
+	ip := p.packetLayers[0].(*layers.IPv4)
 	dst := ip.DstIP
 	ip.DstIP = ip.SrcIP
 	ip.SrcIP = dst
-	p.modified = true
 }
 
 func (p *Packet) Serialize() ([]byte, error) {
