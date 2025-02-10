@@ -69,39 +69,42 @@ func (p *Packet) SwapSrcDstIPv4() {
 func (p *Packet) Serialize() ([]byte, error) {
 	buf := gopacket.NewSerializeBuffer()
 
-	// 找到内部的 TCP 和 IPv4 层，用于设置校验和计算
-	var innerTCP *layers.TCP
-	var innerIPv4 *layers.IPv4
+	// 找到所有需要的层
+	var outerIPv4, innerIPv4 *layers.IPv4
+	var outerUDP *layers.UDP
+	var tcp *layers.TCP
+
 	for _, layer := range p.packetLayers {
 		switch l := layer.(type) {
-		case *layers.TCP:
-			innerTCP = l
 		case *layers.IPv4:
-			// 我们需要内部的 IPv4 层，不是外部的
-			if innerIPv4 == nil {
+			if outerIPv4 == nil {
+				outerIPv4 = l
+			} else {
 				innerIPv4 = l
 			}
+		case *layers.UDP:
+			outerUDP = l
+		case *layers.TCP:
+			tcp = l
 		}
 	}
 
-	// 如果找到了 TCP 和 IPv4 层，设置网络层用于校验和计算
-	if innerTCP != nil && innerIPv4 != nil {
-		innerTCP.SetNetworkLayerForChecksum(innerIPv4)
+	// 设置校验和依赖关系
+	if outerUDP != nil && outerIPv4 != nil {
+		outerUDP.SetNetworkLayerForChecksum(outerIPv4)
+	}
+	if tcp != nil && innerIPv4 != nil {
+		tcp.SetNetworkLayerForChecksum(innerIPv4)
+	}
+
+	// 序列化选项
+	opts := gopacket.SerializeOptions{
+		FixLengths:       true,
+		ComputeChecksums: true,
 	}
 
 	for i := len(p.packetLayers) - 1; i >= 0; i-- {
 		if layer, ok := p.packetLayers[i].(gopacket.SerializableLayer); ok {
-			var opts gopacket.SerializeOptions
-			if p.modified && (i == IPv4LayerIdx || i == UDPLayerIdx) {
-				opts = gopacket.SerializeOptions{
-					ComputeChecksums: true,
-					FixLengths:       true,
-				}
-			} else {
-				opts = gopacket.SerializeOptions{
-					FixLengths: true,
-				}
-			}
 			err := layer.SerializeTo(buf, opts)
 			if err != nil {
 				return nil, fmt.Errorf("failed to serialize layer: %w", err)
