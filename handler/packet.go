@@ -3,7 +3,6 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"log"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -12,6 +11,13 @@ import (
 type PayloadModifyFun func([]byte) []byte
 
 const genevePort = 6081
+
+const (
+	EthernetLayerIdx = 0
+	IPv4LayerIdx     = 1
+	UDPLayerIdx      = 2
+	GeneveLayerIdx   = 3
+)
 
 type Packet struct {
 	modified     bool
@@ -53,10 +59,11 @@ func (p Packet) String() string {
 }
 
 func (p *Packet) SwapSrcDstIPv4() {
-	ip := p.packetLayers[0].(*layers.IPv4)
+	ip := p.packetLayers[1].(*layers.IPv4)
 	dst := ip.DstIP
 	ip.DstIP = ip.SrcIP
 	ip.SrcIP = dst
+	p.modified = true
 }
 
 func (p *Packet) Serialize() ([]byte, error) {
@@ -64,10 +71,15 @@ func (p *Packet) Serialize() ([]byte, error) {
 	for i := len(p.packetLayers) - 1; i >= 0; i-- {
 		if layer, ok := p.packetLayers[i].(gopacket.SerializableLayer); ok {
 			var opts gopacket.SerializeOptions
-			if p.modified && (i == p.insideUDPLayerIdx() || i == p.insideIPLayerIdx()) {
-				opts = gopacket.SerializeOptions{ComputeChecksums: true, FixLengths: true}
+			if p.modified && (i == 1 || i == 2) {
+				opts = gopacket.SerializeOptions{
+					ComputeChecksums: true,
+					FixLengths:       true,
+				}
 			} else {
-				opts = gopacket.SerializeOptions{FixLengths: true}
+				opts = gopacket.SerializeOptions{
+					FixLengths: true,
+				}
 			}
 			err := layer.SerializeTo(buf, opts)
 			if err != nil {
@@ -77,7 +89,7 @@ func (p *Packet) Serialize() ([]byte, error) {
 		} else if layer, ok := p.packetLayers[i].(*layers.Geneve); ok {
 			bytes, err := buf.PrependBytes(len(layer.Contents))
 			if err != nil {
-				log.Printf("failed to prepend geneve bytes: %v", err)
+				return nil, fmt.Errorf("failed to prepend geneve bytes: %v", err)
 			}
 			copy(bytes, layer.Contents)
 		} else {
@@ -85,12 +97,4 @@ func (p *Packet) Serialize() ([]byte, error) {
 		}
 	}
 	return buf.Bytes(), nil
-}
-
-func (p *Packet) insideUDPLayerIdx() int {
-	return len(p.packetLayers) - 2
-}
-
-func (p *Packet) insideIPLayerIdx() int {
-	return len(p.packetLayers) - 3
 }
