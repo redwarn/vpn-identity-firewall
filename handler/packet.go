@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -10,13 +11,11 @@ import (
 
 type PayloadModifyFun func([]byte) []byte
 
-const genevePort = 6081
-
 const (
-	EthernetLayerIdx = 0
-	IPv4LayerIdx     = 1
-	UDPLayerIdx      = 2
-	GeneveLayerIdx   = 3
+	genevePort  = 6081
+	ipLayerIdx  = 3
+	tcpLayerIdx = 4
+	udpLayerIdx = 4
 )
 
 type Packet struct {
@@ -25,33 +24,33 @@ type Packet struct {
 	packetLayers []gopacket.Layer
 }
 
-func NewPacket(packet gopacket.Packet) (*Packet, error) {
-	if packet == nil {
+func NewPacket(data []byte) (*Packet, error) {
+	p := gopacket.NewPacket(data, layers.LayerTypeIPv4, gopacket.Default)
+	if p == nil {
 		return nil, errors.New("invalid packet")
 	}
 
-	packetLayers := packet.Layers()
+	packetLayers := p.Layers()
 
 	if len(packetLayers) < 5 {
 		return nil, errors.New("packet has too few layers")
 	}
 
-	if packetLayers[0].LayerType() != layers.LayerTypeEthernet ||
-		packetLayers[1].LayerType() != layers.LayerTypeIPv4 ||
-		packetLayers[2].LayerType() != layers.LayerTypeUDP ||
-		packetLayers[3].LayerType() != layers.LayerTypeGeneve {
+	if packetLayers[0].LayerType() != layers.LayerTypeIPv4 || packetLayers[1].LayerType() != layers.LayerTypeUDP || packetLayers[2].LayerType() != layers.LayerTypeGeneve {
 		return nil, errors.New("unexpected layers")
 	}
 
-	udp := packetLayers[2].(*layers.UDP)
+	udp := packetLayers[1].(*layers.UDP)
 	if udp.DstPort != genevePort {
 		return nil, errors.New("not Geneve packet")
 	}
 
-	return &Packet{
-		packet:       packet,
-		packetLayers: packetLayers,
-	}, nil
+	packet := &Packet{
+		packet:       p,
+		packetLayers: p.Layers(),
+	}
+
+	return packet, nil
 }
 
 func (p Packet) String() string {
@@ -59,100 +58,60 @@ func (p Packet) String() string {
 }
 
 func (p *Packet) SwapSrcDstIPv4() {
-	ip := p.packetLayers[1].(*layers.IPv4)
+	ip := p.packetLayers[0].(*layers.IPv4)
 	dst := ip.DstIP
 	ip.DstIP = ip.SrcIP
 	ip.SrcIP = dst
-	p.modified = true
 }
 
 func (p *Packet) Serialize() ([]byte, error) {
-	// 将数据包分为外部和内部两部分
-	var outerLayers, innerLayers []gopacket.Layer
-	geneveFound := false
-
-	for _, layer := range p.packetLayers {
-		if !geneveFound {
-			if _, isGeneve := layer.(*layers.Geneve); isGeneve {
-				geneveFound = true
+	buf := gopacket.NewSerializeBuffer()
+	for i := len(p.packetLayers) - 1; i >= 0; i-- {
+		if layer, ok := p.packetLayers[i].(gopacket.SerializableLayer); ok {
+			var opts gopacket.SerializeOptions
+			if p.modified && (i == p.insideUDPLayerIdx() || i == p.insideIPLayerIdx()) {
+				opts = gopacket.SerializeOptions{ComputeChecksums: true, FixLengths: true}
+			} else {
+				opts = gopacket.SerializeOptions{FixLengths: true}
 			}
-			outerLayers = append(outerLayers, layer)
+			err := layer.SerializeTo(buf, opts)
+			if err != nil {
+				return nil, fmt.Errorf("failed to serialize layer: %w", err)
+			}
+			buf.PushLayer(layer.LayerType())
+		} else if layer, ok := p.packetLayers[i].(*layers.Geneve); ok {
+			bytes, err := buf.PrependBytes(len(layer.Contents))
+			if err != nil {
+				log.Printf("failed to prepend geneve bytes: %v", err)
+			}
+			copy(bytes, layer.Contents)
 		} else {
-			innerLayers = append(innerLayers, layer)
+			return nil, fmt.Errorf("layer of unknown type: %v", p.packetLayers[i].LayerType())
 		}
 	}
+	return buf.Bytes(), nil
+}
 
-	// 先序列化内部包
-	innerBuf := gopacket.NewSerializeBuffer()
-	opts := gopacket.SerializeOptions{
-		FixLengths:       true,
-		ComputeChecksums: true,
+func (p *Packet) insideUDPLayerIdx() int {
+	return len(p.packetLayers) - 2
+}
+
+func (p *Packet) insideIPLayerIdx() int {
+	return len(p.packetLayers) - 3
+}
+
+func (p *Packet) GetInnerAddresses() (srcIP, dstIP string, srcPort, dstPort uint16, err error) {
+	innerIP, ok := p.packetLayers[ipLayerIdx].(*layers.IPv4)
+	if !ok {
+		return "", "", 0, 0, errors.New("invalid inner IP layer")
 	}
 
-	// 找到内部的 IPv4 和 TCP 层
-	var innerIPv4 *layers.IPv4
-	var tcp *layers.TCP
-	for _, layer := range innerLayers {
-		switch l := layer.(type) {
-		case *layers.IPv4:
-			innerIPv4 = l
-		case *layers.TCP:
-			tcp = l
-		}
+	if innerTCP, ok := p.packetLayers[tcpLayerIdx].(*layers.TCP); ok {
+		return innerIP.SrcIP.String(), innerIP.DstIP.String(), uint16(innerTCP.SrcPort), uint16(innerTCP.DstPort), nil
+	}
+	if innerUDP, ok := p.packetLayers[udpLayerIdx].(*layers.UDP); ok {
+		return innerIP.SrcIP.String(), innerIP.DstIP.String(), uint16(innerUDP.SrcPort), uint16(innerUDP.DstPort), nil
 	}
 
-	// 设置内部 TCP 的校验和依赖
-	if tcp != nil && innerIPv4 != nil {
-		tcp.SetNetworkLayerForChecksum(innerIPv4)
-	}
-
-	// 序列化内部包（从后向前）
-	for i := len(innerLayers) - 1; i >= 0; i-- {
-		if layer, ok := innerLayers[i].(gopacket.SerializableLayer); ok {
-			err := layer.SerializeTo(innerBuf, opts)
-			if err != nil {
-				return nil, fmt.Errorf("failed to serialize inner layer: %w", err)
-			}
-		}
-	}
-
-	// 准备外部包的序列化
-	outerBuf := gopacket.NewSerializeBuffer()
-
-	// 找到外部的 IPv4 和 UDP 层
-	var outerIPv4 *layers.IPv4
-	var outerUDP *layers.UDP
-	var geneve *layers.Geneve
-	for _, layer := range outerLayers {
-		switch l := layer.(type) {
-		case *layers.IPv4:
-			outerIPv4 = l
-		case *layers.UDP:
-			outerUDP = l
-		case *layers.Geneve:
-			geneve = l
-		}
-	}
-
-	// 设置外部 UDP 的校验和依赖
-	if outerUDP != nil && outerIPv4 != nil {
-		outerUDP.SetNetworkLayerForChecksum(outerIPv4)
-	}
-
-	// 更新 Geneve 的 Payload
-	if geneve != nil {
-		geneve.Contents = innerBuf.Bytes()
-	}
-
-	// 序列化外部包（从前向后）
-	for i := 0; i < len(outerLayers); i++ {
-		if layer, ok := outerLayers[i].(gopacket.SerializableLayer); ok {
-			err := layer.SerializeTo(outerBuf, opts)
-			if err != nil {
-				return nil, fmt.Errorf("failed to serialize outer layer: %w", err)
-			}
-		}
-	}
-
-	return outerBuf.Bytes(), nil
+	return "", "", 0, 0, errors.New("invalid inner transport layer (neither TCP nor UDP)")
 }

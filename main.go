@@ -51,7 +51,7 @@ func main() {
 	}()
 	go listenHealthCheck(ctx, 8080)
 
-	fmt.Println("Starting VPN Identity Firewall...")
+	fmt.Println("Staring VPN Identity Firewall...")
 
 	var wg sync.WaitGroup
 	wg.Add(1)

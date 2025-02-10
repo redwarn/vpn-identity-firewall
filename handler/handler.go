@@ -5,79 +5,60 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/google/gopacket"
-	"github.com/google/gopacket/layers"
-	"github.com/google/gopacket/pcap"
+	"golang.org/x/sys/unix"
 )
 
-const (
-	snapLen = 8500
-	promisc = false
-	timeout = pcap.BlockForever
-	device  = "eth0"
-)
+const chatPort = 3000
 
 func Start(ctx context.Context) error {
-
-	handle, err := pcap.OpenLive(device, snapLen, promisc, timeout)
+	fd, err := unix.Socket(unix.AF_INET, unix.SOCK_RAW, unix.IPPROTO_UDP)
 	if err != nil {
-		return fmt.Errorf("failed to open device %s: %w", device, err)
+		return fmt.Errorf("failed to create a RAW socket: %w", err)
 	}
-	defer handle.Close()
+	defer unix.Close(fd)
 
-	filter := fmt.Sprintf("udp and port %d", genevePort)
-	if err := handle.SetBPFFilter(filter); err != nil {
-		return fmt.Errorf("failed to set BPF filter: %w", err)
+	err = unix.SetsockoptInt(fd, unix.IPPROTO_IP, unix.IP_HDRINCL, 1)
+	if err != nil {
+		return fmt.Errorf("failed to set IP_HDRINCL flag: %w", err)
 	}
 
-	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
-	return run(ctx, handle, packetSource)
+	return run(ctx, fd)
 }
 
-func run(ctx context.Context, handle *pcap.Handle, packetSource *gopacket.PacketSource) error {
+func run(ctx context.Context, fd int) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			packet, err := packetSource.NextPacket()
+			buffer := make([]byte, 8500)
+			length, raddr, err := unix.Recvfrom(fd, buffer, 0)
 			if err != nil {
-				if err == pcap.NextErrorTimeoutExpired {
-					continue
-				}
-				log.Printf("failed to read packet: %v", err)
+				log.Printf("failed to read UDP message %v", err)
+				continue
+			}
+			packet, err := NewPacket(buffer[:length])
+			if err != nil {
 				continue
 			}
 
-			if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
-				tcp, _ := tcpLayer.(*layers.TCP)
-				ipLayer := packet.Layer(layers.LayerTypeIPv4)
-				if ipLayer != nil {
-					ip, _ := ipLayer.(*layers.IPv4)
-					log.Printf("TCP: %s:%d -> %s:%d",
-						ip.SrcIP,
-						tcp.SrcPort,
-						ip.DstIP,
-						tcp.DstPort,
-					)
-				}
+			srcIP, dstIP, srcPort, dstPort, err := packet.GetInnerAddresses()
+			if err != nil {
+				log.Printf("failed to get inner addresses: %v", err)
+			} else {
+				log.Printf("Geneve Inner Packet - Src: %s:%d, Dst: %s:%d",
+					srcIP, srcPort, dstIP, dstPort)
 			}
 
-			p, err := NewPacket(packet)
-			if err != nil {
-				log.Printf("Failed to create a packet: %s", err)
-				continue
-			}
-			fmt.Println(p.String())
-			p.SwapSrcDstIPv4()
-			fmt.Println(p.String())
-			response, err := p.Serialize()
+			packet.SwapSrcDstIPv4()
+
+			response, err := packet.Serialize()
 			if err != nil {
 				log.Printf("failed to serialize packet: %s", err)
 				continue
 			}
-
-			if err := handle.WritePacketData(response); err != nil {
+			err = unix.Sendto(fd, response, 0, raddr)
+			if err != nil {
 				log.Printf("failed to write response: %v", err)
 			}
 		}
