@@ -26,18 +26,22 @@ func NewPacket(packet gopacket.Packet) (*Packet, error) {
 
 	packetLayers := packet.Layers()
 
-	if len(packetLayers) < 4 {
+	if len(packetLayers) < 5 {
 		return nil, errors.New("packet has too few layers")
 	}
 
-	if packetLayers[0].LayerType() != layers.LayerTypeIPv4 || packetLayers[1].LayerType() != layers.LayerTypeUDP || packetLayers[2].LayerType() != layers.LayerTypeGeneve {
+	if packetLayers[0].LayerType() != layers.LayerTypeEthernet ||
+		packetLayers[1].LayerType() != layers.LayerTypeIPv4 ||
+		packetLayers[2].LayerType() != layers.LayerTypeUDP ||
+		packetLayers[3].LayerType() != layers.LayerTypeGeneve {
 		return nil, errors.New("unexpected layers")
 	}
 
-	udp := packetLayers[1].(*layers.UDP)
+	udp := packetLayers[2].(*layers.UDP)
 	if udp.DstPort != genevePort {
 		return nil, errors.New("not Geneve packet")
 	}
+
 	return &Packet{
 		packet:       packet,
 		packetLayers: packetLayers,
