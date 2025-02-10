@@ -68,10 +68,31 @@ func (p *Packet) SwapSrcDstIPv4() {
 
 func (p *Packet) Serialize() ([]byte, error) {
 	buf := gopacket.NewSerializeBuffer()
+
+	// 找到内部的 TCP 和 IPv4 层，用于设置校验和计算
+	var innerTCP *layers.TCP
+	var innerIPv4 *layers.IPv4
+	for _, layer := range p.packetLayers {
+		switch l := layer.(type) {
+		case *layers.TCP:
+			innerTCP = l
+		case *layers.IPv4:
+			// 我们需要内部的 IPv4 层，不是外部的
+			if innerIPv4 == nil {
+				innerIPv4 = l
+			}
+		}
+	}
+
+	// 如果找到了 TCP 和 IPv4 层，设置网络层用于校验和计算
+	if innerTCP != nil && innerIPv4 != nil {
+		innerTCP.SetNetworkLayerForChecksum(innerIPv4)
+	}
+
 	for i := len(p.packetLayers) - 1; i >= 0; i-- {
 		if layer, ok := p.packetLayers[i].(gopacket.SerializableLayer); ok {
 			var opts gopacket.SerializeOptions
-			if p.modified && (i == 1 || i == 2) {
+			if p.modified && (i == IPv4LayerIdx || i == UDPLayerIdx) {
 				opts = gopacket.SerializeOptions{
 					ComputeChecksums: true,
 					FixLengths:       true,
