@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
@@ -42,6 +43,8 @@ func run(ctx context.Context, handle *pcap.Handle) error {
 			if err != nil {
 				continue
 			}
+			fmt.Println(p.String())
+
 			p.SwapSrcDstIPv4()
 
 			response, err := p.Serialize()
@@ -49,10 +52,12 @@ func run(ctx context.Context, handle *pcap.Handle) error {
 				log.Printf("failed to serialize packet: %s", err)
 				continue
 			}
+			fmt.Println(p.String())
 			err = handle.WritePacketData(response)
 			if err != nil {
 				log.Printf("failed to write response: %v", err)
 			}
+			log.Printf("[%s] Response packet sent.", time.Now().Format(time.RFC3339))
 		}
 	}
 }
