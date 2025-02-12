@@ -49,15 +49,17 @@ func (p *Packet) SwapSrcDstIPv4() {
 	dst := ip.DstIP
 	ip.DstIP = ip.SrcIP
 	ip.SrcIP = dst
+	p.modified = true
 }
 
 func (p *Packet) Serialize() ([]byte, error) {
 	buf := gopacket.NewSerializeBuffer()
+	fmt.Println(p.packetLayers)
 	for i := len(p.packetLayers) - 1; i >= 0; i-- {
 		fmt.Println(p.packetLayers[i].LayerType())
 		if layer, ok := p.packetLayers[i].(gopacket.SerializableLayer); ok {
 			var opts gopacket.SerializeOptions
-			if p.modified && (i == p.insideUDPLayerIdx() || i == p.insideIPLayerIdx()) {
+			if p.modified && i == p.insideUDPLayerIdx() {
 				opts = gopacket.SerializeOptions{ComputeChecksums: true, FixLengths: true}
 			} else {
 				opts = gopacket.SerializeOptions{FixLengths: true}
@@ -82,10 +84,6 @@ func (p *Packet) Serialize() ([]byte, error) {
 
 func (p *Packet) insideUDPLayerIdx() int {
 	return len(p.packetLayers) - 4
-}
-
-func (p *Packet) insideIPLayerIdx() int {
-	return len(p.packetLayers) - 5
 }
 
 // - Layer 1 (14 bytes) = Ethernet	{Contents=[..14..] Payload=[..128..] SrcMAC=06:30:ef:83:93:87 DstMAC=06:36:45:f1:49:d7 EthernetType=IPv4 Length=0}
