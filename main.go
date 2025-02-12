@@ -22,7 +22,7 @@ func main() {
 		select {
 		case p := <-packets:
 			layers := p.Packet.Layers()
-			for i := 0; i <= len(layers); i++ {
+			for i := 0; i <= len(layers)-1; i++ {
 				fmt.Println(layers[i].LayerType())
 			}
 			p.SetVerdict(netfilter.NF_ACCEPT)
