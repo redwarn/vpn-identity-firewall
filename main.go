@@ -8,8 +8,6 @@ import (
 	"syscall"
 
 	"github.com/florianl/go-nfqueue"
-	"github.com/google/gopacket"
-	"github.com/google/gopacket/layers"
 	"github.com/mdlayher/netlink"
 )
 
@@ -34,16 +32,16 @@ func main() {
 
 	gopacketCallback := func(a nfqueue.Attribute) int {
 		id := *a.PacketID
-		packet := gopacket.NewPacket(*a.Payload, layers.LayerTypeEthernet, gopacket.Default)
-		packetLayers := packet.Layers()
-		log.Println(packetLayers[1].LayerType())
-		log.Println(len(packetLayers))
-		if ipLayer, ok := packetLayers[1].(*layers.IPv4); ok {
-			log.Printf("Packet is IPv4 %s, %s ", ipLayer.SrcIP, ipLayer.DstIP)
-		}
-		if tcpLayer, ok := packetLayers[1].(*layers.TCP); ok {
-			log.Printf("Packet is TCP Port %s", tcpLayer.DstPort)
-		}
+		// packet := gopacket.NewPacket(*a.Payload, layers.LayerTypeEthernet, gopacket.Default)
+		// packetLayers := packet.Layers()
+		// log.Println(packetLayers[1].LayerType())
+		// log.Println(len(packetLayers))
+		// if ipLayer, ok := packetLayers[1].(*layers.IPv4); ok {
+		// 	log.Printf("Packet is IPv4 %s, %s ", ipLayer.SrcIP, ipLayer.DstIP)
+		// }
+		// if tcpLayer, ok := packetLayers[1].(*layers.TCP); ok {
+		// 	log.Printf("Packet is TCP Port %s", tcpLayer.DstPort)
+		// }
 		nfq.SetVerdict(id, nfqueue.NfAccept)
 		return 0
 	}
