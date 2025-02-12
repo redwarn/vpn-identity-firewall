@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/florianl/go-nfqueue"
+	"github.com/mdlayher/netlink"
 )
 
 func main() {
@@ -23,11 +24,11 @@ func main() {
 		log.Fatalf("Failed to open NFQueue: %v", err)
 	}
 	defer nfq.Close()
-	// if err := nfq.SetOption(netlink.NoENOBUFS, true); err != nil {
-	// 	log.Printf("failed to set netlink option %v: %v\n",
-	// 		netlink.NoENOBUFS, err)
-	// 	return
-	// }
+	if err := nfq.SetOption(netlink.NoENOBUFS, true); err != nil {
+		log.Printf("failed to set netlink option %v: %v\n",
+			netlink.NoENOBUFS, err)
+		return
+	}
 
 	gopacketCallback := func(a nfqueue.Attribute) int {
 		id := *a.PacketID
@@ -41,6 +42,6 @@ func main() {
 	<-sigChan
 }
 func errorFunc(err error) int {
-	log.Printf("Error: %v", err)
+	// log.Printf("Error: %v", err)
 	return 0
 }
