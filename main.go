@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/AkihiroSuda/go-netfilter-queue"
-	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
 )
 
 func main() {
@@ -22,8 +22,9 @@ func main() {
 	for true {
 		select {
 		case p := <-packets:
-			layers := p.Packet.Layers()
-			ip := layers[3].(gopacket.LayerTypeIPv4)
+			PacketLayers := p.Packet.Layers()
+			ip := PacketLayers[3].(*layers.IPv4)
+			fmt.Println("src_ip: %s dst_ip: %s", ip.SrcIP, ip.DstIP)
 			p.SetVerdict(netfilter.NF_ACCEPT)
 		}
 	}
