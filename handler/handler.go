@@ -43,7 +43,6 @@ func run(ctx context.Context, handle *pcap.Handle) error {
 			if err != nil {
 				continue
 			}
-			fmt.Println(p.String())
 
 			p.SwapSrcDstIPv4()
 
@@ -52,7 +51,6 @@ func run(ctx context.Context, handle *pcap.Handle) error {
 				log.Printf("failed to serialize packet: %s", err)
 				continue
 			}
-			fmt.Println(p.String())
 			err = handle.WritePacketData(response)
 			if err != nil {
 				log.Printf("failed to write response: %v", err)
