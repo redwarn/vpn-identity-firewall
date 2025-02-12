@@ -5,59 +5,51 @@ import (
 	"fmt"
 	"log"
 
-	"golang.org/x/sys/unix"
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/pcap"
 )
 
-const chatPort = 3000
-
 func Start(ctx context.Context) error {
-	fd, err := unix.Socket(unix.AF_INET, unix.SOCK_RAW, unix.IPPROTO_UDP)
+	handle, err := pcap.OpenLive("eth0", 65536, true, pcap.BlockForever)
 	if err != nil {
-		return fmt.Errorf("failed to create a RAW socket: %w", err)
+		return fmt.Errorf("pcap open failed: %w", err)
 	}
-	defer unix.Close(fd)
+	defer handle.Close()
 
-	err = unix.SetsockoptInt(fd, unix.IPPROTO_IP, unix.IP_HDRINCL, 1)
-	if err != nil {
-		return fmt.Errorf("failed to set IP_HDRINCL flag: %w", err)
+	if err := handle.SetBPFFilter("udp dst port 6081"); err != nil {
+		return fmt.Errorf("BPF filter error: %w", err)
 	}
 
-	return run(ctx, fd)
+	return run(ctx, handle)
 }
+func run(ctx context.Context, handle *pcap.Handle) error {
+	source := gopacket.NewPacketSource(handle, handle.LinkType())
 
-func run(ctx context.Context, fd int) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			buffer := make([]byte, 8500)
-			length, raddr, err := unix.Recvfrom(fd, buffer, 0)
+			packet, err := source.NextPacket()
 			if err != nil {
-				log.Printf("failed to read UDP message %v", err)
+				if err == pcap.NextErrorTimeoutExpired {
+					continue
+				}
+				log.Printf("failed to read packet: %v", err)
 				continue
 			}
-			packet, err := NewPacket(buffer[:length])
+			p, err := NewPacket(packet)
 			if err != nil {
 				continue
 			}
+			p.SwapSrcDstIPv4()
 
-			srcIP, dstIP, srcPort, dstPort, err := packet.GetInnerAddresses()
-			if err != nil {
-				log.Printf("failed to get inner addresses: %v", err)
-			} else {
-				log.Printf("Geneve Inner Packet - Src: %s:%d, Dst: %s:%d",
-					srcIP, srcPort, dstIP, dstPort)
-			}
-
-			packet.SwapSrcDstIPv4()
-
-			response, err := packet.Serialize()
+			response, err := p.Serialize()
 			if err != nil {
 				log.Printf("failed to serialize packet: %s", err)
 				continue
 			}
-			err = unix.Sendto(fd, response, 0, raddr)
+			err = handle.WritePacketData(response)
 			if err != nil {
 				log.Printf("failed to write response: %v", err)
 			}
