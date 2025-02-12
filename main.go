@@ -37,10 +37,10 @@ func main() {
 		packet := gopacket.NewPacket(*a.Payload, layers.LayerTypeEthernet, gopacket.Default)
 		packetLayers := packet.Layers()
 
-		if ipLayer, ok := packetLayers[3].(*layers.IPv4); ok {
+		if ipLayer, ok := packetLayers[1].(*layers.IPv4); ok {
 			log.Printf("Packet is IPv4 %s, %s ", ipLayer.SrcIP, ipLayer.DstIP)
 		}
-		if tcpLayer, ok := packetLayers[3].(*layers.TCP); ok {
+		if tcpLayer, ok := packetLayers[1].(*layers.TCP); ok {
 			log.Printf("Packet is TCP Port %s", tcpLayer.DstPort)
 		}
 		nfq.SetVerdict(id, nfqueue.NfAccept)
