@@ -108,10 +108,10 @@ func handlePacket(fd int, data []byte, raddr unix.Sockaddr) {
 		}
 	}()
 
-	start := time.Now()
-	defer func() {
-		log.Printf("Packet processed in %v", time.Since(start))
-	}()
+	// start := time.Now()
+	// defer func() {
+	// 	log.Printf("Packet processed in %v", time.Since(start))
+	// }()
 
 	// 原有处理逻辑...
 	packet, err := NewPacket(data)
