@@ -1,68 +1,31 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"log"
-	"net"
 	"os"
-	"os/signal"
-	"sync"
 
-	"vpn-identity-firewall/handler"
+	"github.com/AkihiroSuda/go-netfilter-queue"
 )
 
-func listenHealthCheck(ctx context.Context, port int) {
-	addr := net.TCPAddr{
-		IP:   net.ParseIP("0.0.0.0"),
-		Port: port,
-	}
-	listener, err := net.ListenTCP("tcp4", &addr)
-	if err != nil {
-		log.Panicf("failed to start listening for health check: %v", err)
-	}
-	defer listener.Close()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			conn, err := listener.AcceptTCP()
-			if err != nil {
-				log.Printf("failed to accept connection: %v", err)
-				continue
-			}
-			log.Printf("accepted health check connection from %v", conn.RemoteAddr())
-
-			conn.Close()
-		}
-	}
-}
-
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	stopChan := make(chan os.Signal, 1)
-	signal.Notify(stopChan, os.Interrupt)
-	go func() {
-		<-stopChan
-		log.Printf("stopping")
-		cancel()
-	}()
-	go listenHealthCheck(ctx, 8080)
+	var err error
 
-	fmt.Println("Staring VPN Identity Firewall...")
+	nfq, err := netfilter.NewNFQueue(0, 100, netfilter.NF_DEFAULT_PACKET_SIZE)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	defer nfq.Close()
+	packets := nfq.GetPackets()
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func(ctx context.Context) {
-		err := handler.Start(ctx)
-		if err != nil {
-			log.Printf("Handler stopped: %s", err)
+	for true {
+		select {
+		case p := <-packets:
+			layers := p.Packet.Layers()
+			for i := 0; i <= len(layers); i++ {
+				fmt.Println(layers[i].LayerType())
+			}
+			p.SetVerdict(netfilter.NF_ACCEPT)
 		}
-		wg.Done()
-	}(ctx)
-
-	wg.Wait()
-	log.Printf("DONE")
+	}
 }
