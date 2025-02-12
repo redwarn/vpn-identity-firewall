@@ -35,7 +35,7 @@ func main() {
 	gopacketCallback := func(a nfqueue.Attribute) int {
 		id := *a.PacketID
 		packet := gopacket.NewPacket(*a.Payload, layers.LayerTypeEthernet, gopacket.Default)
-
+		log.Println(packet.String())
 		// 检查数据包的协议类型
 		if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
 			log.Printf("Packet is UDP")
