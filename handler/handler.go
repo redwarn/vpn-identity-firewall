@@ -11,7 +11,7 @@ import (
 
 const (
 	bufferSize = 65535
-	maxWorkers = 4
+	maxWorkers = 400
 )
 
 var (
