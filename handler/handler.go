@@ -6,13 +6,16 @@ import (
 	"log"
 	"net"
 	"sync"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
 
 const (
-	bufferSize    = 65535 // 使用标准最大IP包大小
-	maxRetryCount = 3     // 错误重试次数
+	bufferSize     = 65535
+	maxWorkers     = 1000 // 最大并发worker数量
+	maxRetryCount  = 3
+	receiveTimeout = 100 * time.Millisecond
 )
 
 var (
@@ -21,6 +24,7 @@ var (
 			return make([]byte, bufferSize)
 		},
 	}
+	semaphore = make(chan struct{}, maxWorkers) // 并发控制信号量
 )
 
 func Start(ctx context.Context) error {
@@ -50,28 +54,70 @@ func run(ctx context.Context, fd int) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			buffer := bufferPool.Get().([]byte)
-			length, raddr, err := unix.Recvfrom(fd, buffer, 0)
-			if err != nil {
-				bufferPool.Put(buffer)
-				log.Printf("socket read error from %v: %v", formatSockaddr(raddr), err)
-				continue
+			if err := processPacket(ctx, fd); err != nil {
+				log.Printf("Packet processing error: %v", err)
 			}
-
-			go func(data []byte, sa unix.Sockaddr) {
-				defer bufferPool.Put(buffer)
-				if err := handlePacket(fd, data[:length], sa); err != nil {
-					log.Printf("Packet handling error: %v", err)
-				}
-			}(buffer, raddr)
 		}
 	}
 }
+func processPacket(ctx context.Context, fd int) error {
+	buffer := bufferPool.Get().([]byte)
+	defer bufferPool.Put(buffer)
 
-func handlePacket(fd int, data []byte, raddr unix.Sockaddr) error {
+	if err := unix.SetNonblock(fd, false); err != nil {
+		return fmt.Errorf("set blocking failed: %w", err)
+	}
+
+	// 设置接收超时
+	tv := unix.NsecToTimeval(receiveTimeout.Nanoseconds())
+	if err := unix.SetsockoptTimeval(fd, unix.SOL_SOCKET, unix.SO_RCVTIMEO, &tv); err != nil {
+		return fmt.Errorf("set receive timeout failed: %w", err)
+	}
+
+	length, raddr, err := unix.Recvfrom(fd, buffer, 0)
+	if err != nil {
+		if err == unix.EAGAIN || err == unix.EWOULDBLOCK {
+			return nil // 超时不是错误
+		}
+		return fmt.Errorf("receive failed: %w", err)
+	}
+
+	select {
+	case semaphore <- struct{}{}: // 获取worker槽位
+		go func(data []byte, sa unix.Sockaddr) {
+			defer func() {
+				<-semaphore // 释放worker槽位
+				if r := recover(); r != nil {
+					log.Printf("panic in packet handler: %v", r)
+				}
+			}()
+
+			handlePacket(fd, data, sa)
+		}(append([]byte(nil), buffer[:length]...), raddr)
+		return nil
+	default:
+		log.Printf("Worker pool full, dropping packet from %s", formatSockaddr(raddr))
+		return nil
+	}
+}
+
+func handlePacket(fd int, data []byte, raddr unix.Sockaddr) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("panic during packet handling: %v", r)
+		}
+	}()
+
+	start := time.Now()
+	defer func() {
+		log.Printf("Packet processed in %v", time.Since(start))
+	}()
+
+	// 原有处理逻辑...
 	packet, err := NewPacket(data)
 	if err != nil {
-		return fmt.Errorf("packet parsing error: %w", err)
+		log.Printf("Packet parsing error: %v", err)
+		return
 	}
 
 	if srcIP, dstIP, srcPort, dstPort, err := packet.GetInnerAddresses(); err == nil {
@@ -83,17 +129,18 @@ func handlePacket(fd int, data []byte, raddr unix.Sockaddr) error {
 
 	response, err := packet.Serialize()
 	if err != nil {
-		return fmt.Errorf("serialization error: %w", err)
+		log.Printf("Serialization error: %v", err)
+		return
 	}
 
 	for i := 0; i < maxRetryCount; i++ {
 		if err := unix.Sendto(fd, response, 0, raddr); err == nil {
-			return nil
+			return
 		}
-		log.Printf("retry %d sending to %s failed: %v",
-			i+1, formatSockaddr(raddr), err)
+		// 指数退避重试
+		time.Sleep(time.Duration(1<<uint(i)) * time.Millisecond)
 	}
-	return fmt.Errorf("max retries exceeded sending to %s", formatSockaddr(raddr))
+	log.Printf("Max retries exceeded sending to %s", formatSockaddr(raddr))
 }
 
 func formatSockaddr(sa unix.Sockaddr) string {
