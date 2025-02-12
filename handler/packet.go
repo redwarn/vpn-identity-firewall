@@ -54,7 +54,7 @@ func (p *Packet) SwapSrcDstIPv4() {
 
 func (p *Packet) Serialize() ([]byte, error) {
 	buf := gopacket.NewSerializeBuffer()
-	fmt.Println(p.packetLayers)
+	fmt.Println(len(p.packetLayers))
 	for i := len(p.packetLayers) - 1; i >= 0; i-- {
 		fmt.Println(p.packetLayers[i].LayerType())
 		if layer, ok := p.packetLayers[i].(gopacket.SerializableLayer); ok {
@@ -64,6 +64,7 @@ func (p *Packet) Serialize() ([]byte, error) {
 			} else {
 				opts = gopacket.SerializeOptions{FixLengths: true}
 			}
+			fmt.Print(string(buf.Bytes()))
 			err := layer.SerializeTo(buf, opts)
 			if err != nil {
 				return nil, fmt.Errorf("failed to serialize layer: %w", err)
