@@ -1,30 +1,40 @@
 package main
 
 import (
-	"fmt"
+	"context"
+	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/AkihiroSuda/go-netfilter-queue"
+	"github.com/florianl/go-nfqueue"
 )
 
 func main() {
-	var err error
+	config := nfqueue.Config{
+		NfQueue:      0,
+		MaxPacketLen: 0xFFFF,
+		MaxQueueLen:  0xFFFF,
+		Copymode:     nfqueue.NfQnlCopyPacket,
+	}
 
-	nfq, err := netfilter.NewNFQueue(0, 10000, netfilter.NF_DEFAULT_PACKET_SIZE)
+	nfq, err := nfqueue.Open(&config)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		log.Fatalf("Failed to open NFQueue: %v", err)
 	}
 	defer nfq.Close()
-	packets := nfq.GetPackets()
-
-	for true {
-		select {
-		case p := <-packets:
-			// PacketLayers := p.Packet.Layers()
-			// ip := PacketLayers[3].(*layers.IPv4)
-			// fmt.Println("src_ip: %s dst_ip: %s", ip.SrcIP, ip.DstIP)
-			p.SetVerdict(netfilter.NF_ACCEPT)
-		}
+	gopacketCallback := func(a nfqueue.Attribute) int {
+		id := *a.PacketID
+		nfq.SetVerdict(id, nfqueue.NfAccept)
+		return 0
 	}
+	nfq.RegisterWithErrorFunc(context.TODO(), gopacketCallback, errorFunc)
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	<-sigChan
+}
+func errorFunc(err error) int {
+	log.Printf("Error: %v", err)
+	return 0
 }
