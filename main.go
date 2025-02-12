@@ -40,7 +40,7 @@ func main() {
 		}
 		packet = gopacket.NewPacket(*a.Payload, layers.LayerTypeGeneve, gopacket.Default)
 		if geneve := packet.Layer(layers.LayerTypeGeneve); geneve != nil {
-			log.Printf("this is not udp")
+			log.Printf("this is not geneve")
 		}
 		nfq.SetVerdict(id, nfqueue.NfAccept)
 		return 0
