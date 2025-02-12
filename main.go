@@ -36,7 +36,8 @@ func main() {
 		id := *a.PacketID
 		packet := gopacket.NewPacket(*a.Payload, layers.LayerTypeEthernet, gopacket.Default)
 		packetLayers := packet.Layers()
-
+		log.Println(packetLayers[1].LayerType())
+		log.Println(len(packetLayers))
 		if ipLayer, ok := packetLayers[1].(*layers.IPv4); ok {
 			log.Printf("Packet is IPv4 %s, %s ", ipLayer.SrcIP, ipLayer.DstIP)
 		}
