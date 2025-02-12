@@ -13,7 +13,7 @@ import (
 
 const (
 	bufferSize     = 65535
-	maxWorkers     = 1000 // 最大并发worker数量
+	maxWorkers     = 20 // 最大并发worker数量
 	maxRetryCount  = 3
 	receiveTimeout = 100 * time.Millisecond
 )
@@ -120,10 +120,11 @@ func handlePacket(fd int, data []byte, raddr unix.Sockaddr) {
 		return
 	}
 
-	if srcIP, dstIP, srcPort, dstPort, err := packet.GetInnerAddresses(); err == nil {
-		log.Printf("Geneve Inner Packet - Src: %s:%d, Dst: %s:%d",
-			srcIP, srcPort, dstIP, dstPort)
-	}
+	// if srcIP, dstIP, srcPort, dstPort, err := packet.GetInnerAddresses(); err == nil {
+
+	// log.Printf("Geneve Inner Packet - Src: %s:%d, Dst: %s:%d",
+	// 	srcIP, srcPort, dstIP, dstPort)
+	// }
 
 	packet.SwapSrcDstIPv4()
 
