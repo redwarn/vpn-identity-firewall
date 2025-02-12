@@ -34,13 +34,13 @@ func main() {
 
 	gopacketCallback := func(a nfqueue.Attribute) int {
 		id := *a.PacketID
-		packet := gopacket.NewPacket(*a.Payload, layers.LayerTypeEthernet, gopacket.Default)
-		if ethernetLayer := packet.Layer(layers.LayerTypeEthernet); ethernetLayer != nil {
-			log.Printf("this is not LayerTypeEthernet")
+		packet := gopacket.NewPacket(*a.Payload, layers.LayerTypeUDP, gopacket.Default)
+		if udp := packet.Layer(layers.LayerTypeUDP); udp != nil {
+			log.Printf("this is not udp")
 		}
-		packet = gopacket.NewPacket(*a.Payload, layers.LayerTypeIPv4, gopacket.Default)
-		if ipv4 := packet.Layer(layers.LayerTypeIPv4); ipv4 != nil {
-			log.Printf("this is not ipv4")
+		packet = gopacket.NewPacket(*a.Payload, layers.LayerTypeGeneve, gopacket.Default)
+		if geneve := packet.Layer(layers.LayerTypeGeneve); geneve != nil {
+			log.Printf("this is not udp")
 		}
 		nfq.SetVerdict(id, nfqueue.NfAccept)
 		return 0
