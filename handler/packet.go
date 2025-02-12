@@ -3,7 +3,6 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"log"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -56,13 +55,13 @@ func (p *Packet) Serialize() ([]byte, error) {
 			opts := gopacket.SerializeOptions{FixLengths: true}
 			err := layer.SerializeTo(buf, opts)
 			if err != nil {
-				return nil, fmt.Errorf("failed to serialize layer: %w", err)
+				return nil, fmt.Errorf("failed to serialize layer %v: %w", layer.LayerType(), err)
 			}
 			buf.PushLayer(layer.LayerType())
 		} else if layer, ok := p.packetLayers[i].(*layers.Geneve); ok {
 			bytes, err := buf.PrependBytes(len(layer.Contents))
 			if err != nil {
-				log.Printf("failed to prepend geneve bytes: %v", err)
+				return nil, fmt.Errorf("failed to prepend geneve bytes: %w", err)
 			}
 			copy(bytes, layer.Contents)
 		} else {
