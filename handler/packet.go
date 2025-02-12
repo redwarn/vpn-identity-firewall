@@ -69,6 +69,7 @@ func (p *Packet) Serialize() ([]byte, error) {
 	for i := len(p.packetLayers) - 1; i >= 0; i-- {
 		if layer, ok := p.packetLayers[i].(gopacket.SerializableLayer); ok {
 			var opts gopacket.SerializeOptions
+			fmt.Println(p.modified, p.packetLayers[i].LayerType())
 			if p.modified && (i == p.insideUDPLayerIdx() || i == p.insideIPLayerIdx()) {
 				opts = gopacket.SerializeOptions{ComputeChecksums: true, FixLengths: true}
 			} else {
