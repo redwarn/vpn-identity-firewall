@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/florianl/go-nfqueue"
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
 	"github.com/mdlayher/netlink"
 )
 
@@ -33,7 +34,14 @@ func main() {
 
 	gopacketCallback := func(a nfqueue.Attribute) int {
 		id := *a.PacketID
-		fmt.Println(string(*a.Payload))
+		packet := gopacket.NewPacket(*a.Payload, layers.LayerTypeEthernet, gopacket.Default)
+		if ethernetLayer := packet.Layer(layers.LayerTypeEthernet); ethernetLayer != nil {
+			log.Printf("this is not LayerTypeEthernet")
+		}
+		packet = gopacket.NewPacket(*a.Payload, layers.LayerTypeIPv4, gopacket.Default)
+		if ipv4 := packet.Layer(layers.LayerTypeIPv4); ipv4 != nil {
+			log.Printf("this is not ipv4")
+		}
 		nfq.SetVerdict(id, nfqueue.NfAccept)
 		return 0
 	}
