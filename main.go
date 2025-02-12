@@ -34,13 +34,23 @@ func main() {
 
 	gopacketCallback := func(a nfqueue.Attribute) int {
 		id := *a.PacketID
-		packet := gopacket.NewPacket(*a.Payload, layers.LayerTypeUDP, gopacket.Default)
-		if udp := packet.Layer(layers.LayerTypeUDP); udp != nil {
-			log.Printf("this is not udp")
+		packet := gopacket.NewPacket(*a.Payload, layers.LayerTypeEthernet, gopacket.Default)
+
+		// 检查数据包的协议类型
+		if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
+			log.Printf("Packet is UDP")
 		}
-		packet = gopacket.NewPacket(*a.Payload, layers.LayerTypeGeneve, gopacket.Default)
-		if geneve := packet.Layer(layers.LayerTypeGeneve); geneve != nil {
-			log.Printf("this is not geneve")
+		if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
+			log.Printf("Packet is TCP")
+		}
+		if ipLayer := packet.Layer(layers.LayerTypeIPv4); ipLayer != nil {
+			log.Printf("Packet is IPv4")
+		}
+		if ipv6Layer := packet.Layer(layers.LayerTypeIPv6); ipv6Layer != nil {
+			log.Printf("Packet is IPv6")
+		}
+		if geneveLayer := packet.Layer(layers.LayerTypeGeneve); geneveLayer != nil {
+			log.Printf("Packet is Geneve")
 		}
 		nfq.SetVerdict(id, nfqueue.NfAccept)
 		return 0
