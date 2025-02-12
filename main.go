@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -32,6 +33,7 @@ func main() {
 
 	gopacketCallback := func(a nfqueue.Attribute) int {
 		id := *a.PacketID
+		fmt.Println(string(*a.Payload))
 		nfq.SetVerdict(id, nfqueue.NfAccept)
 		return 0
 	}
