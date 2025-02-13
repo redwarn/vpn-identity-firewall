@@ -23,11 +23,11 @@ var (
 	})
 
 	packetSerializeFailures = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "packet_create_failures_total",
+		Name: "packet_serialize_failures_total",
 		Help: "Total number of failed packet serialize calls",
 	})
 	packetSendFailures = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "packet_create_failures_total",
+		Name: "packet_send_failures_total",
 		Help: "Total number of failed packet sendto calls",
 	})
 
