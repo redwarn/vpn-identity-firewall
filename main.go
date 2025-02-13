@@ -34,15 +34,25 @@ func main() {
 
 	gopacketCallback := func(a nfqueue.Attribute) int {
 		id := *a.PacketID
-		packet := gopacket.NewPacket(*a.Payload, layers.LayerTypeEthernet, gopacket.Default)
-		packetLayers := packet.Layers()
-		log.Println(packetLayers[1].LayerType())
-		log.Println(len(packetLayers))
-		if ipLayer, ok := packetLayers[1].(*layers.IPv4); ok {
-			log.Printf("Packet is IPv4 %s, %s ", ipLayer.SrcIP, ipLayer.DstIP)
+
+		p := gopacket.NewPacket(*a.Payload, layers.LayerTypeEthernet, gopacket.Default)
+		if p.ErrorLayer() != nil {
+			log.Printf("Error decoding packet: %v", p.ErrorLayer().Error())
+			return 0
 		}
-		if tcpLayer, ok := packetLayers[1].(*layers.TCP); ok {
-			log.Printf("Packet is TCP Port %s", tcpLayer.DstPort)
+
+		log.Printf("Received packet (ID: %d):\n", *a.PacketID)
+
+		ethernetLayer := p.Layer(layers.LayerTypeEthernet)
+		if ethernetLayer != nil {
+			ethernetPacket, _ := ethernetLayer.(*layers.Ethernet)
+			log.Printf("  Source MAC: %s, Destination MAC: %s\n", ethernetPacket.SrcMAC, ethernetPacket.DstMAC)
+		}
+
+		ipLayer := p.Layer(layers.LayerTypeIPv4)
+		if ipLayer != nil {
+			ipPacket, _ := ipLayer.(*layers.IPv4)
+			log.Printf("  Source IP: %s, Destination IP: %s\n", ipPacket.SrcIP, ipPacket.DstIP)
 		}
 		nfq.SetVerdict(id, nfqueue.NfAccept)
 		return 0
