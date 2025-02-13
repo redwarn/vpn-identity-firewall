@@ -3,10 +3,10 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"log"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type PayloadModifyFun func([]byte) []byte
@@ -81,7 +81,7 @@ func (p *Packet) Serialize() ([]byte, error) {
 		} else if layer, ok := p.packetLayers[i].(*layers.Geneve); ok {
 			bytes, err := buf.PrependBytes(len(layer.Contents))
 			if err != nil {
-				log.Printf("failed to prepend geneve bytes: %v", err)
+				return nil, fmt.Errorf("failed to prepend geneve bytes: %v", err)
 			}
 			copy(bytes, layer.Contents)
 		} else {
@@ -113,4 +113,9 @@ func (p *Packet) GetInnerAddresses() (srcIP, dstIP string, srcPort, dstPort uint
 	}
 
 	return "", "", 0, 0, errors.New("invalid inner transport layer (neither TCP nor UDP)")
+}
+
+
+func init() {
+	prometheus.MustRegister()
 }

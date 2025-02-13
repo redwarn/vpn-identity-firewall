@@ -6,12 +6,39 @@ import (
 	"log"
 	"sync"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"golang.org/x/sys/unix"
 )
 
 const (
 	bufferSize = 65535
 	maxWorkers = 400
+)
+
+var (
+	packetCreateFailures = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "packet_create_failures_total",
+		Help: "Total number of failed new packet calls",
+	})
+
+	packetSerializeFailures = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "packet_create_failures_total",
+		Help: "Total number of failed packet serialize calls",
+	})
+	packetSendFailures = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "packet_create_failures_total",
+		Help: "Total number of failed packet sendto calls",
+	})
+
+	packetProcessSuccess = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "packet_process_success_total",
+		Help: "Total number of successful process packet calls",
+	})
+	packetReceive = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "packet_receive_total",
+		Help: "Total number of receive packet  calls",
+	})
 )
 
 var (
@@ -65,6 +92,7 @@ func run(ctx context.Context, fd int) error {
 
 			for i := 0; i < n; i++ {
 				if events[i].Fd == int32(fd) {
+					packetReceive.Inc()
 					if err := processPacket(fd); err != nil {
 						log.Printf("Packet processing error: %v", err)
 					}
@@ -100,6 +128,7 @@ func processPacket(fd int) error {
 			}()
 
 			handlePacket(fd, data, sa)
+
 		}(append([]byte(nil), buffer[:length]...), raddr)
 		return nil
 	default:
@@ -116,24 +145,29 @@ func handlePacket(fd int, data []byte, raddr unix.Sockaddr) {
 	}()
 	packet, err := NewPacket(data)
 	if err != nil {
+		packetCreateFailures.Inc()
 		return
 	}
 	packet.SwapSrcDstIPv4()
 
 	response, err := packet.Serialize()
 	if err != nil {
+		packetSerializeFailures.Inc()
 		log.Printf("Serialization error: %v", err)
 		return
 	}
 
 	if err := unix.Sendto(fd, response, 0, raddr); err != nil {
+		packetSendFailures.Inc()
 		log.Printf("Sending error %s", err)
 	}
+	packetProcessSuccess.Inc()
 }
 
 func createEpoll(fd int) (int, error) {
 	epollFd, err := unix.EpollCreate1(0)
 	if err != nil {
+		epollCreateFailures.Inc()
 		return -1, fmt.Errorf("epoll create failed: %w", err)
 	}
 
@@ -148,4 +182,12 @@ func createEpoll(fd int) (int, error) {
 	}
 
 	return epollFd, nil
+}
+
+func init() {
+	prometheus.MustRegister(packetCreateFailures)
+	prometheus.MustRegister(packetProcessSuccess)
+	prometheus.MustRegister(packetReceive)
+	prometheus.MustRegister(packetSendFailures)
+	prometheus.MustRegister(packetSerializeFailures)
 }

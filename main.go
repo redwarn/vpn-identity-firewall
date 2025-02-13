@@ -4,40 +4,22 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"os/signal"
 	"sync"
 
+	"net/http"
 	"vpn-identity-firewall/handler"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-func listenHealthCheck(ctx context.Context, port int) {
-	addr := net.TCPAddr{
-		IP:   net.ParseIP("0.0.0.0"),
-		Port: port,
-	}
-	listener, err := net.ListenTCP("tcp4", &addr)
-	if err != nil {
-		log.Panicf("failed to start listening for health check: %v", err)
-	}
-	defer listener.Close()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			conn, err := listener.AcceptTCP()
-			if err != nil {
-				log.Printf("failed to accept connection: %v", err)
-				continue
-			}
-			log.Printf("accepted health check connection from %v", conn.RemoteAddr())
-
-			conn.Close()
-		}
-	}
+func HealthCheck() {
+	http.Handle("/metrics", promhttp.Handler())
+	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("healthz"))
+	})
+	http.ListenAndServe(":8080", nil)
 }
 
 func main() {
@@ -49,7 +31,7 @@ func main() {
 		log.Printf("stopping")
 		cancel()
 	}()
-	go listenHealthCheck(ctx, 8080)
+	go HealthCheck()
 
 	fmt.Println("Staring VPN Identity Firewall...")
 
