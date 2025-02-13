@@ -149,7 +149,10 @@ func handlePacket(fd int, data []byte, raddr unix.Sockaddr) {
 		return
 	}
 	packet.SwapSrcDstIPv4()
-
+	srcIP, dstIP := packet.GetInnerAddresses()
+	if srcIP == "" || dstIP == "" {
+		log.Printf("src/dst ip is empty")
+	}
 	response, err := packet.Serialize()
 	if err != nil {
 		packetSerializeFailures.Inc()

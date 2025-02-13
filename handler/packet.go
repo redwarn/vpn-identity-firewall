@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 type PayloadModifyFun func([]byte) []byte
@@ -99,23 +98,17 @@ func (p *Packet) insideIPLayerIdx() int {
 	return len(p.packetLayers) - 3
 }
 
-func (p *Packet) GetInnerAddresses() (srcIP, dstIP string, srcPort, dstPort uint16, err error) {
-	innerIP, ok := p.packetLayers[ipLayerIdx].(*layers.IPv4)
-	if !ok {
-		return "", "", 0, 0, errors.New("invalid inner IP layer")
+func (p *Packet) GetInnerAddresses() (srcIP, dstIP string) {
+	if innerIP, ok := p.packetLayers[ipLayerIdx].(*layers.IPv4); ok {
+		return innerIP.SrcIP.String(), innerIP.DstIP.String()
 	}
+	return "", ""
+	// if innerTCP, ok := p.packetLayers[transportLayerIdx].(*layers.TCP); ok {
+	// 	return innerIP.SrcIP.String(), innerIP.DstIP.String(), uint16(innerTCP.SrcPort), uint16(innerTCP.DstPort), nil
+	// }
+	// if innerUDP, ok := p.packetLayers[transportLayerIdx].(*layers.UDP); ok {
+	// 	return innerIP.SrcIP.String(), innerIP.DstIP.String(), uint16(innerUDP.SrcPort), uint16(innerUDP.DstPort), nil
+	// }
 
-	if innerTCP, ok := p.packetLayers[transportLayerIdx].(*layers.TCP); ok {
-		return innerIP.SrcIP.String(), innerIP.DstIP.String(), uint16(innerTCP.SrcPort), uint16(innerTCP.DstPort), nil
-	}
-	if innerUDP, ok := p.packetLayers[transportLayerIdx].(*layers.UDP); ok {
-		return innerIP.SrcIP.String(), innerIP.DstIP.String(), uint16(innerUDP.SrcPort), uint16(innerUDP.DstPort), nil
-	}
-
-	return "", "", 0, 0, errors.New("invalid inner transport layer (neither TCP nor UDP)")
-}
-
-
-func init() {
-	prometheus.MustRegister()
+	// return "", "", 0, 0, errors.New("invalid inner transport layer (neither TCP nor UDP)")
 }
