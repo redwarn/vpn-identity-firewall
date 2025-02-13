@@ -182,11 +182,3 @@ func createEpoll(fd int) (int, error) {
 
 	return epollFd, nil
 }
-
-func init() {
-	prometheus.MustRegister(packetCreateFailures)
-	prometheus.MustRegister(packetProcessSuccess)
-	prometheus.MustRegister(packetReceive)
-	prometheus.MustRegister(packetSendFailures)
-	prometheus.MustRegister(packetSerializeFailures)
-}
