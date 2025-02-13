@@ -34,17 +34,41 @@ func Start(ctx context.Context) error {
 		return fmt.Errorf("failed to set IP_HDRINCL flag: %w", err)
 	}
 
+	if err := unix.SetNonblock(fd, true); err != nil {
+		return fmt.Errorf("failed to set non-blocking mode: %w", err)
+	}
+
 	return run(ctx, fd)
 }
 
 func run(ctx context.Context, fd int) error {
+	epollFd, err := createEpoll(fd)
+	if err != nil {
+		return fmt.Errorf("failed to create epoll: %w", err)
+	}
+	defer unix.Close(epollFd)
+
+	events := make([]unix.EpollEvent, maxWorkers)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			if err := processPacket(fd); err != nil {
-				log.Printf("Packet processing error: %v", err)
+			n, err := unix.EpollWait(epollFd, events, -1)
+			if err != nil {
+				if err == unix.EINTR {
+					continue
+				}
+				return fmt.Errorf("epoll wait failed: %w", err)
+			}
+
+			for i := 0; i < n; i++ {
+				if events[i].Fd == int32(fd) {
+					if err := processPacket(fd); err != nil {
+						log.Printf("Packet processing error: %v", err)
+					}
+				}
 			}
 		}
 	}
@@ -92,7 +116,6 @@ func handlePacket(fd int, data []byte, raddr unix.Sockaddr) {
 	}()
 	packet, err := NewPacket(data)
 	if err != nil {
-		log.Printf("Packet parsing error: %v", err)
 		return
 	}
 	packet.SwapSrcDstIPv4()
@@ -106,4 +129,23 @@ func handlePacket(fd int, data []byte, raddr unix.Sockaddr) {
 	if err := unix.Sendto(fd, response, 0, raddr); err != nil {
 		log.Printf("Sending error %s", err)
 	}
+}
+
+func createEpoll(fd int) (int, error) {
+	epollFd, err := unix.EpollCreate1(0)
+	if err != nil {
+		return -1, fmt.Errorf("epoll create failed: %w", err)
+	}
+
+	event := unix.EpollEvent{
+		Events: unix.EPOLLIN,
+		Fd:     int32(fd),
+	}
+
+	if err := unix.EpollCtl(epollFd, unix.EPOLL_CTL_ADD, fd, &event); err != nil {
+		unix.Close(epollFd)
+		return -1, fmt.Errorf("epoll ctl failed: %w", err)
+	}
+
+	return epollFd, nil
 }

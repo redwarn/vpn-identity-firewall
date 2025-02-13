@@ -12,10 +12,9 @@ import (
 type PayloadModifyFun func([]byte) []byte
 
 const (
-	genevePort  = 6081
-	ipLayerIdx  = 3
-	tcpLayerIdx = 4
-	udpLayerIdx = 4
+	genevePort        = 6081
+	ipLayerIdx        = 3
+	transportLayerIdx = 4
 )
 
 type Packet struct {
@@ -106,10 +105,10 @@ func (p *Packet) GetInnerAddresses() (srcIP, dstIP string, srcPort, dstPort uint
 		return "", "", 0, 0, errors.New("invalid inner IP layer")
 	}
 
-	if innerTCP, ok := p.packetLayers[tcpLayerIdx].(*layers.TCP); ok {
+	if innerTCP, ok := p.packetLayers[transportLayerIdx].(*layers.TCP); ok {
 		return innerIP.SrcIP.String(), innerIP.DstIP.String(), uint16(innerTCP.SrcPort), uint16(innerTCP.DstPort), nil
 	}
-	if innerUDP, ok := p.packetLayers[udpLayerIdx].(*layers.UDP); ok {
+	if innerUDP, ok := p.packetLayers[transportLayerIdx].(*layers.UDP); ok {
 		return innerIP.SrcIP.String(), innerIP.DstIP.String(), uint16(innerUDP.SrcPort), uint16(innerUDP.DstPort), nil
 	}
 
