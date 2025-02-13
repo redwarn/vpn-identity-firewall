@@ -40,13 +40,10 @@ func main() {
 		ethernetLayer := p.Layer(layers.LayerTypeEthernet)
 		if ethernetLayer != nil {
 			ethernetPacket, _ := ethernetLayer.(*layers.Ethernet)
+			log.Println(string(ethernetPacket.Payload))
+			log.Println(string(ethernetPacket.Contents))
+
 			log.Printf("  Source MAC: %s, Destination MAC: %s\n", ethernetPacket.SrcMAC, ethernetPacket.DstMAC)
-		}
-		log.Println(string(ethernetLayer.LayerPayload()))
-		ipLayer := p.Layer(layers.LayerTypeIPv4)
-		if ipLayer != nil {
-			ipPacket, _ := ipLayer.(*layers.IPv4)
-			log.Printf("  Source IP: %s, Destination IP: %s\n", ipPacket.SrcIP, ipPacket.DstIP)
 		}
 		nfq.SetVerdict(id, nfqueue.NfAccept)
 		return 0
