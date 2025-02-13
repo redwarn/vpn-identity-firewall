@@ -13,7 +13,7 @@ import (
 
 const (
 	bufferSize = 65535
-	maxWorkers = 400
+	maxWorkers = 1000
 )
 
 var (
@@ -167,7 +167,6 @@ func handlePacket(fd int, data []byte, raddr unix.Sockaddr) {
 func createEpoll(fd int) (int, error) {
 	epollFd, err := unix.EpollCreate1(0)
 	if err != nil {
-		epollCreateFailures.Inc()
 		return -1, fmt.Errorf("epoll create failed: %w", err)
 	}
 
