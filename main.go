@@ -14,6 +14,7 @@ import (
 )
 
 func main() {
+
 	config := nfqueue.Config{
 		NfQueue:      0,
 		MaxPacketLen: 0xFFFF,
