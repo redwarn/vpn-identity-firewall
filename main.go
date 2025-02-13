@@ -42,7 +42,7 @@ func main() {
 			ethernetPacket, _ := ethernetLayer.(*layers.Ethernet)
 			log.Printf("  Source MAC: %s, Destination MAC: %s\n", ethernetPacket.SrcMAC, ethernetPacket.DstMAC)
 		}
-
+		log.Println(string(ethernetLayer.LayerPayload()))
 		ipLayer := p.Layer(layers.LayerTypeIPv4)
 		if ipLayer != nil {
 			ipPacket, _ := ipLayer.(*layers.IPv4)
