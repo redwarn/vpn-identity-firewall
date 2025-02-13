@@ -34,7 +34,7 @@ func main() {
 
 	gopacketCallback := func(a nfqueue.Attribute) int {
 		id := *a.PacketID
-
+		log.Println(a.HwProtocol)
 		p := gopacket.NewPacket(*a.Payload, layers.LayerTypeEthernet, gopacket.Default)
 		if p.ErrorLayer() != nil {
 			log.Printf("Error decoding packet: %v", p.ErrorLayer().Error())
